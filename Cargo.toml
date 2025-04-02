@@ -5,6 +5,9 @@ version = "0.1.0"
 edition = "2021"
 description = "Library that allows logging qlog events"
 repository = "https://github.com/DannyG-1952723/qlog-rs"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["logging", "network-programming"]
 
 [dependencies]
 chrono = { version = "0.4.39", features = ["serde"] }
