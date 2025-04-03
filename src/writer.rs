@@ -2,7 +2,7 @@ use std::{collections::VecDeque, env, fs::File, io::{BufWriter, Write}, sync::{L
 
 use serde::Serialize;
 
-use crate::{events::{Event, StreamType}, logfile::{CommonFields, LogFile, QlogFileSeq, TraceSeq, VantagePoint}};
+use crate::{events::Event, moq::data::StreamType, logfile::{CommonFields, LogFile, QlogFileSeq, TraceSeq, VantagePoint}};
 
 // Static variable so that a logger variable doesn't need to be passed to every function wherein logging occurs
 static QLOG_WRITER: LazyLock<Mutex<QlogWriter>> = LazyLock::new(|| Mutex::new(QlogWriter::init()));
