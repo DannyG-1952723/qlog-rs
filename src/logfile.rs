@@ -22,18 +22,12 @@ impl QlogFileSeq {
 #[skip_serializing_none]
 #[derive(Serialize)]
 pub struct LogFile {
-	/// For qvis compatibility
-	qlog_version: String,
-	/// For qvis compatibility
-	qlog_format: String,
 	/// Identifies the concrete log file schema
 	file_schema: String,
 	/// Indicates the serialization format using a media type
 	serialization_format: String,
 	title: Option<String>,
-	description: Option<String>,
-	/// Identifies concrete event namespaces and their associated types
-	event_schemas: Vec<String>
+	description: Option<String>
 }
 
 impl LogFile {
@@ -41,15 +35,10 @@ impl LogFile {
 	// TODO: Add support for other serialization formats
 	pub fn new(title: Option<String>, description: Option<String>) -> LogFile {
 		LogFile {
-			qlog_version: "draft-02".to_string(),
-			qlog_format: "JSON-SEQ".to_string(),
 			file_schema: "urn:ietf:params:qlog:file:sequential".to_string(),
 			serialization_format: "application/qlog+json-seq".to_string(),
 			title,
-			description,
-			// TODO: Maybe add QUIC events to this
-			// TODO: Change MoQ event space (this is a placeholder)
-			event_schemas: vec![format!("urn:ietf:params:qlog:events:{VERSION_STRING}")]
+			description
 		}
 	}
 }
@@ -61,11 +50,21 @@ pub struct TraceSeq {
 	description: Option<String>,
 	common_fields: Option<CommonFields>,
 	vantage_point: Option<VantagePoint>,
+    /// Identifies concrete event namespaces and their associated types
+	event_schemas: Vec<String>
 }
 
 impl TraceSeq {
 	pub fn new(title: Option<String>, description: Option<String>, common_fields: Option<CommonFields>, vantage_point: Option<VantagePoint>) -> TraceSeq {
-		TraceSeq { title, description, common_fields, vantage_point }
+		TraceSeq {
+            title,
+            description,
+            common_fields,
+            vantage_point,
+            // TODO: Maybe add QUIC events to this
+			// TODO: Change MoQ event space (this is a placeholder)
+			event_schemas: vec![format!("urn:ietf:params:qlog:events:{VERSION_STRING}")]
+        }
 	}
 }
 
@@ -76,17 +75,16 @@ pub struct CommonFields {
 	path: Option<PathId>,
 	time_format: Option<TimeFormat>,
 	reference_time: Option<ReferenceTime>,
-	protocol_types: Option<Vec<String>>,
 	group_id: Option<GroupId>,
 	#[serde(flatten)]						// Adds the custom fields directly to CommonFields when serializing
 	custom_fields: HashMap<String, String>
 }
 
 impl CommonFields {
-	pub fn new(path: Option<PathId>, time_format: Option<TimeFormat>, reference_time: Option<ReferenceTime>, protocol_types: Option<Vec<String>>, group_id: Option<GroupId>, custom_fields: Option<HashMap<String, String>>) -> CommonFields {
+	pub fn new(path: Option<PathId>, time_format: Option<TimeFormat>, reference_time: Option<ReferenceTime>, group_id: Option<GroupId>, custom_fields: Option<HashMap<String, String>>) -> CommonFields {
 		let custom_fields = custom_fields.unwrap_or_default();
 
-		CommonFields { path, time_format, reference_time, protocol_types, group_id, custom_fields }
+		CommonFields { path, time_format, reference_time, group_id, custom_fields }
 	}
 }
 
@@ -96,7 +94,6 @@ impl Default for CommonFields {
 			path: Some("".to_string()),
 			time_format: Some(TimeFormat::default()),
 			reference_time: Some(ReferenceTime::default()),
-			protocol_types: Some(vec!["MoQ".to_string()]),
 			group_id: None,
 			custom_fields: HashMap::new()
 		}

@@ -15,7 +15,6 @@ pub struct Event {
 	#[serde(skip_serializing_if = "is_empty_or_none")]
 	path: Option<PathId>,
 	time_format: Option<TimeFormat>,
-	protocol_types: Option<Vec<String>>,
 	group_id: Option<GroupId>,
 	system_info: Option<SystemInformation>,
 	#[serde(flatten)]
@@ -165,7 +164,6 @@ impl Event {
 			// TODO: Maybe add a path ID
 			path: Some("".to_string()),
 			time_format: None,
-			protocol_types: None,
 			group_id: Some(group_id.to_string()),
 			system_info: None,
 			custom_fields: HashMap::new()
