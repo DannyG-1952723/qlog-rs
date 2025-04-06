@@ -2,6 +2,7 @@ pub mod writer;
 pub mod logfile;
 pub mod events;
 
-pub mod moq;
+#[cfg(feature = "moq-transfork")]
+pub mod moq_transfork;
 
 mod util;

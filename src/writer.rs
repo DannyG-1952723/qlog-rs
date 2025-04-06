@@ -2,7 +2,10 @@ use std::{collections::VecDeque, env, fs::File, io::{BufWriter, Write}, sync::{L
 
 use serde::Serialize;
 
-use crate::{events::Event, moq::data::StreamType, logfile::{CommonFields, LogFile, QlogFileSeq, TraceSeq, VantagePoint}};
+use crate::{events::Event, logfile::{CommonFields, LogFile, QlogFileSeq, TraceSeq, VantagePoint}};
+
+#[cfg(feature = "moq-transfork")]
+use crate::moq_transfork::data::StreamType;
 
 // Static variable so that a logger variable doesn't need to be passed to every function wherein logging occurs
 static QLOG_WRITER: LazyLock<Mutex<QlogWriter>> = LazyLock::new(|| Mutex::new(QlogWriter::init()));
@@ -10,6 +13,7 @@ static QLOG_WRITER: LazyLock<Mutex<QlogWriter>> = LazyLock::new(|| Mutex::new(Ql
 pub struct QlogWriter {
 	writer: Option<BufWriter<File>>,
 	file_details_written: bool,
+    #[allow(dead_code)]
 	cached_events: VecDeque<Event>
 }
 
@@ -45,14 +49,45 @@ impl QlogWriter {
 		}
 	}
 
+    #[cfg_attr(feature = "moq-transfork", allow(unreachable_code))]
 	pub fn log_event(event: Event) {
+        #[cfg(feature = "moq-transfork")]
+        return Self::log_moq_event(event);
+
 		let mut qlog_writer = QLOG_WRITER.lock().unwrap();
 
 		if !qlog_writer.file_details_written {
 			panic!("Log the qlog file details before logging events, call 'QlogWriter::log_file_details()' somewhere in the beginning of the program");
 		}
 
-		let is_session_started_event = event.is_session_started_client();
+		if let Some(ref mut writer) = qlog_writer.writer {
+			Self::log(writer, &event);
+		}
+	}
+
+	// TODO: Maybe add more error handling
+	// Flushes write buffer after every log, otherwise won't write to file when exiting the program using ^C
+	fn log(writer: &mut BufWriter<File>, data: &impl Serialize) {
+		let json = serde_json::to_string_pretty(data).unwrap();
+
+		writer.write_all(Self::RECORD_SEPARATOR).unwrap();
+		writer.write_all(json.as_bytes()).unwrap();
+		writer.write_all(Self::LINE_FEED).unwrap();
+
+		writer.flush().unwrap();
+	}
+}
+
+#[cfg(feature = "moq-transfork")]
+impl QlogWriter {
+    fn log_moq_event(event: Event) {
+        let mut qlog_writer = QLOG_WRITER.lock().unwrap();
+
+		if !qlog_writer.file_details_written {
+			panic!("Log the qlog file details before logging events, call 'QlogWriter::log_file_details()' somewhere in the beginning of the program");
+		}
+
+		let is_session_started_event = event.moq_is_session_started_client();
 		let mut session_stream_event_option: Option<Event> = None;
 
 		if is_session_started_event {
@@ -75,7 +110,7 @@ impl QlogWriter {
 				Self::log(writer, &event);
 			}
 		}
-	}
+    }
 
 	fn is_session_stream_without_id(event: &Event) -> bool {
 		if event.get_name() != "moq-transfork-03:stream_created" && event.get_name() != "moq-transfork-03:stream_parsed" {
@@ -86,18 +121,6 @@ impl QlogWriter {
 			return false;
 		}
 
-		event.get_stream_type().is_some_and(|stream_type| *stream_type == StreamType::Session)
-	}
-
-	// TODO: Maybe add more error handling
-	// Flushes write buffer after every log, otherwise won't write to file when exiting the program using ^C
-	fn log(writer: &mut BufWriter<File>, data: &impl Serialize) {
-		let json = serde_json::to_string_pretty(data).unwrap();
-
-		writer.write_all(Self::RECORD_SEPARATOR).unwrap();
-		writer.write_all(json.as_bytes()).unwrap();
-		writer.write_all(Self::LINE_FEED).unwrap();
-
-		writer.flush().unwrap();
+		event.moq_get_stream_type().is_some_and(|stream_type| *stream_type == StreamType::Session)
 	}
 }

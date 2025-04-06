@@ -1,7 +1,6 @@
 use std::fmt::Write;
 
 pub const MAX_LOG_DATA_LEN: usize = 64;
-pub const VERSION_STRING: &str = "moq-transfork-03";
 
 pub type PathId = String;
 pub type GroupId = String;

@@ -4,7 +4,10 @@ use chrono::{DateTime, FixedOffset};
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 
-use crate::util::{VERSION_STRING, is_empty_or_none, PathId, GroupId};
+use crate::util::{is_empty_or_none, PathId, GroupId};
+
+#[cfg(feature = "moq-transfork")]
+use crate::moq_transfork::data::MOQ_VERSION_STRING;
 
 #[derive(Serialize)]
 pub struct QlogFileSeq {
@@ -56,14 +59,18 @@ pub struct TraceSeq {
 
 impl TraceSeq {
 	pub fn new(title: Option<String>, description: Option<String>, common_fields: Option<CommonFields>, vantage_point: Option<VantagePoint>) -> TraceSeq {
+        #[allow(unused_mut)]
+        let mut event_schemas: Vec<String> = Vec::default();
+
+        #[cfg(feature = "moq-transfork")]
+        event_schemas.push(format!("urn:ietf:params:qlog:events:{MOQ_VERSION_STRING}"));
+
 		TraceSeq {
             title,
             description,
             common_fields,
             vantage_point,
-            // TODO: Maybe add QUIC events to this
-			// TODO: Change MoQ event space (this is a placeholder)
-			event_schemas: vec![format!("urn:ietf:params:qlog:events:{VERSION_STRING}")]
+			event_schemas
         }
 	}
 }

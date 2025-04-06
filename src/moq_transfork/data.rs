@@ -2,6 +2,9 @@ use serde::Serialize;
 
 use super::events::*;
 
+// TODO: Change MoQ event space (this is a placeholder)
+pub const MOQ_VERSION_STRING: &str = "moq-transfork-03";
+
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum MoqEventData {
