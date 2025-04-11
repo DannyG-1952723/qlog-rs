@@ -9,6 +9,9 @@ use crate::{logfile::TimeFormat, util::{bytes_to_hexstring, is_empty_or_none, Gr
 #[cfg(feature = "moq-transfork")]
 use crate::moq_transfork::{data::*, events::*};
 
+#[cfg(feature = "quic-10")]
+use crate::quic_10::{data::*, events::*};
+
 #[skip_serializing_none]
 #[derive(Serialize)]
 pub struct Event {
@@ -53,6 +56,53 @@ impl Event {
     pub fn set_group_id(&mut self, group_id: Option<&String>) {
 		self.group_id = group_id.cloned();
 	}
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ProtocolEventData {
+    #[cfg(feature = "moq-transfork")]
+	MoqEventData(MoqEventData),
+
+    #[cfg(feature = "quic-10")]
+	Quic10EventData(Quic10EventData)
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
+pub struct RawInfo {
+	/// The full byte length
+	length: Option<u64>,
+	/// The byte length of the payload
+	payload_length: Option<u64>,
+	/// The (potentially truncated) contents, including headers and possibly trailers
+	data: Option<HexString>
+}
+
+impl RawInfo {
+	pub fn new(length: Option<u64>, data: Option<&[u8]>) -> Self {
+		match data {
+			Some(payload) => {
+				let payload_length: u64 = payload.len().try_into().unwrap();
+
+				// Only log the first MAX_LOG_DATA_LEN bytes
+				if payload_length > MAX_LOG_DATA_LEN.try_into().unwrap() {
+					let truncated = &payload[..MAX_LOG_DATA_LEN];
+					return Self { length, payload_length: Some(payload_length), data: Some(bytes_to_hexstring(truncated)) };
+				}
+
+				Self { length, payload_length: Some(payload_length), data: Some(bytes_to_hexstring(payload)) }
+			},
+			None => Self { length, payload_length: None, data: None }
+		}
+	}
+}
+
+#[derive(Serialize)]
+struct SystemInformation {
+	processor_id: Option<u32>,
+	process_id: Option<u32>,
+	thread_id: Option<u32>
 }
 
 #[cfg(feature = "moq-transfork")]
@@ -219,46 +269,9 @@ impl Event {
 	}
 }
 
-#[derive(Serialize)]
-#[serde(untagged)]
-enum ProtocolEventData {
-    #[cfg(feature = "moq-transfork")]
-	MoqEventData(MoqEventData)
-}
-
-#[skip_serializing_none]
-#[derive(Serialize)]
-pub struct RawInfo {
-	/// The full byte length
-	length: Option<u64>,
-	/// The byte length of the payload
-	payload_length: Option<u64>,
-	/// The (potentially truncated) contents, including headers and possibly trailers
-	data: Option<HexString>
-}
-
-impl RawInfo {
-	pub fn new(length: Option<u64>, data: Option<&[u8]>) -> Self {
-		match data {
-			Some(payload) => {
-				let payload_length: u64 = payload.len().try_into().unwrap();
-
-				// Only log the first MAX_LOG_DATA_LEN bytes
-				if payload_length > MAX_LOG_DATA_LEN.try_into().unwrap() {
-					let truncated = &payload[..MAX_LOG_DATA_LEN];
-					return Self { length, payload_length: Some(payload_length), data: Some(bytes_to_hexstring(truncated)) };
-				}
-
-				Self { length, payload_length: Some(payload_length), data: Some(bytes_to_hexstring(payload)) }
-			},
-			None => Self { length, payload_length: None, data: None }
-		}
-	}
-}
-
-#[derive(Serialize)]
-struct SystemInformation {
-	processor_id: Option<u32>,
-	process_id: Option<u32>,
-	thread_id: Option<u32>
+#[cfg(feature = "quic-10")]
+impl Event {
+    fn new_quic_10(event_name: &str, event_data: Quic10EventData, group_id: u64) -> Self {
+        Self::new(format!("{QUIC_10_VERSION_STRING}:{event_name}").as_str(), ProtocolEventData::Quic10EventData(event_data), group_id)
+    }
 }

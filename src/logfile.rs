@@ -9,6 +9,9 @@ use crate::util::{is_empty_or_none, PathId, GroupId};
 #[cfg(feature = "moq-transfork")]
 use crate::moq_transfork::data::MOQ_VERSION_STRING;
 
+#[cfg(feature = "quic-10")]
+use crate::quic_10::data::QUIC_10_VERSION_STRING;
+
 #[derive(Serialize)]
 pub struct QlogFileSeq {
 	#[serde(flatten)]
@@ -64,6 +67,9 @@ impl TraceSeq {
 
         #[cfg(feature = "moq-transfork")]
         event_schemas.push(format!("urn:ietf:params:qlog:events:{MOQ_VERSION_STRING}"));
+
+        #[cfg(feature = "quic-10")]
+        event_schemas.push(format!("urn:ietf:params:qlog:events:{QUIC_10_VERSION_STRING}"));
 
 		TraceSeq {
             title,
