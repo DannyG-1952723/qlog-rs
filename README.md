@@ -8,6 +8,7 @@ Supported file types:
 * `.sqlog` (JSON text sequences)
 
 Supported protocols:
+* QUIC ([draft 10](https://datatracker.ietf.org/doc/draft-ietf-quic-qlog-quic-events/10/), feature = `quic-10`)
 * MoQ Transfork (custom events, feature = `moq-transfork`)
 
 ## Usage
@@ -22,4 +23,11 @@ When you want to generate logs, run your application with the `QLOGFILE` environ
 
 ```bash
 QLOGFILE="qlog_file.sqlog" cargo run --bin your-application
+```
+
+You can use this library if you're implementing your own version of a network protocol (e.g., a QUIC implementation) and want to support logging (if the protocol is supported). Here's an example for QUIC (draft 10).
+
+```rust
+let event = Event::quic_10_connection_started(local, remote);
+QlogWriter::log_event(event);
 ```
