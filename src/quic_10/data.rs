@@ -1,45 +1,51 @@
 use std::collections::HashMap;
 
 use serde::Serialize;
+use serde_with::skip_serializing_none;
 
 use crate::{events::RawInfo, util::HexString};
+
+use super::events::*;
 
 pub const QUIC_10_VERSION_STRING: &str = "quic-10";
 
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum Quic10EventData {
-    ServerListening,
-    ConnectionStarted,
-    ConnectionClosed,
-    ConnectionIdUpdated,
-    SpinBitUpdated,
-    ConnectionStateUpdated,
-    PathAssigned,
-    MtuUpdated,
-    KeyUpdated,
-    KeyDiscarded,
-    VersionInformation,
-    AlpnInformation,
-    ParametersSet,
-    ParametersRestored,
-    PacketSent,
-    PacketReceived,
-    PacketDropped,
-    PacketBuffered,
-    PacketsAcked,
-    UdpDatagramsSent,
-    UdpDatagramsReceived,
-    UdpDatagramDropped,
-    StreamStateUpdated,
-    FramesProcessed,
-    StreamDataMoved,
-    DatagramDataMoved,
-    RecoveryParametersSet,
-    RecoveryMetricsUpdated,
-    CongestionStateUpdated,
-    LossTimerUpdated,
-    PacketLost
+    ServerListening(ServerListening),
+    ConnectionStarted(ConnectionStarted),
+    ConnectionClosed(ConnectionClosed),
+    ConnectionIdUpdated(ConnectionIdUpdated),
+    SpinBitUpdated(SpinBitUpdated),
+    ConnectionStateUpdated(ConnectionStateUpdated),
+    PathAssigned(PathAssigned),
+    MtuUpdated(MtuUpdated),
+    VersionInformation(VersionInformation),
+    AlpnInformation(AlpnInformation),
+    ParametersSet(ParametersSet),
+    ParametersRestored(ParametersRestored),
+    PacketSent(PacketSent),
+    PacketReceived(PacketReceived),
+    PacketDropped(PacketDropped),
+    PacketBuffered(PacketBuffered),
+    PacketsAcked(PacketsAcked),
+    UdpDatagramsSent(UdpDatagramsSent),
+    UdpDatagramsReceived(UdpDatagramsReceived),
+    UdpDatagramDropped(UdpDatagramDropped),
+    StreamStateUpdated(StreamStateUpdated),
+    FramesProcessed(FramesProcessed),
+    StreamDataMoved(StreamDataMoved),
+    DatagramDataMoved(DatagramDataMoved),
+    MigrationStateUpdated(MigrationStateUpdated),
+    KeyUpdated(KeyUpdated),
+    KeyDiscarded(KeyDiscarded),
+    RecoveryParametersSet(RecoveryParametersSet),
+    RecoveryMetricsUpdated(RecoveryMetricsUpdated),
+    CongestionStateUpdated(CongestionStateUpdated),
+    LossTimerUpdated(LossTimerUpdated),
+    PacketLost(PacketLost),
+    MarkedForRetransmit(MarkedForRetransmit),
+    EcnStateUpdated(EcnStateUpdated)
 }
 
 pub type QuicVersion = HexString;
@@ -56,6 +62,8 @@ pub enum Owner {
 pub type IpAddress = String;
 
 /// Single half/direction of a path. A full path is comprised of two halves. Firstly: the server sends to the remote client IP + port using a specific destination Connection ID. Secondly: the client sends to the remote server IP + port using a different destination Connection ID.
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct PathEndpointInfo {
     ip_v4: Option<IpAddress>,
     port_v4: Option<u16>,
@@ -66,13 +74,20 @@ pub struct PathEndpointInfo {
     connection_ids: Vec<ConnectionId>
 }
 
-#[derive(Serialize)]
+impl PathEndpointInfo {
+    pub fn new(ip_v4: Option<IpAddress>, port_v4: Option<u16>, ip_v6: Option<IpAddress>, port_v6: Option<u16>, connection_ids: Vec<ConnectionId>) -> Self {
+        Self { ip_v4, port_v4, ip_v6, port_v6, connection_ids }
+    }
+}
+
+#[derive(PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-// TODO: Rename 'ZeroRtt' and 'OneRtt' in serialization
 pub enum PacketType {
     Initial,
     Handshake,
+    #[serde(rename = "0RTT")]
     ZeroRtt,
+    #[serde(rename = "1RTT")]
     OneRtt,
     Retry,
     VersionNegotiation,
@@ -89,48 +104,107 @@ pub enum PacketNumberSpace {
 }
 
 /// If the packet_type numerical value does not map to a known packet_type string, the packet_type value of "unknown" can be used and the raw value captured in the packet_type_bytes field; a numerical value without variable-length integer encoding.
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct PacketHeader {
-    // TODO: Default = true
-    quic_bit: Option<bool>,
+    quic_bit: bool,
     packet_type: PacketType,
 
-    // TODO: Only if packet_type == Unknown
     packet_type_bytes: Option<u64>,
 
-    // TODO: Only if packet_type == Initial || Handshake || ZeroRtt || OneRtt
     packet_number: Option<u64>,
 
     /// The bit flags of the packet headers (spin bit, key update bit, etc. up to and including the packet number length bits if present.
     flags: Option<u8>,
 
-    // TODO: Only if packet_type == Initial || Retry
     token: Option<Token>,
 
-    // TODO: Only if packet_type == Initial || Handshake || ZeroRtt
     /// Signifies length of the packet_number plus the payload.
     length: Option<u16>,
 
-    // TODO: Only if present in the header
     version: Option<QuicVersion>,
     scil: Option<u8>,
     dcil: Option<u8>,
     scid: Option<ConnectionId>,
-    /// If correctly using transport:connection_id_updated events, dcid can be skipped for 1RTT packets.
+    /// Can be skipped for 1RTT packets if correctly using transport:connection_id_updated events.
     dcid: Option<ConnectionId>
 }
 
+impl PacketHeader {
+    pub fn new(
+        quic_bit: Option<bool>,
+        packet_type: PacketType,
+        packet_type_bytes: Option<u64>,
+        packet_number: Option<u64>,
+        flags: Option<u8>,
+        token: Option<Token>,
+        length: Option<u16>,
+        version: Option<QuicVersion>,
+        scil: Option<u8>,
+        dcil: Option<u8>,
+        scid: Option<ConnectionId>,
+        dcid: Option<ConnectionId>
+    ) -> Self {
+        let quic_bit = quic_bit.unwrap_or_else(|| true);
+
+        if packet_type == PacketType::Unknown && packet_type_bytes.is_none() {
+            panic!("When the packet_type is 'unknown', provide a value for packet_type_bytes");
+        }
+
+        if (packet_type == PacketType::Initial || packet_type == PacketType::Handshake || packet_type == PacketType::ZeroRtt || packet_type == PacketType::OneRtt) && packet_number.is_none() {
+            panic!("When the packet_type is 'initial', 'handshake', '0RTT', or '1RTT', provide a value for packet_number");
+        }
+
+        if (packet_type == PacketType::Initial || packet_type == PacketType::Retry) && token.is_none() {
+            panic!("When the packet_type is 'initial', or 'retry', provide a value for token");
+        }
+
+        if (packet_type == PacketType::Initial || packet_type == PacketType::Handshake || packet_type == PacketType::ZeroRtt) && length.is_none() {
+            panic!("When the packet_type is 'initial', 'handshake', or '0RTT', provide a value for length");
+        }
+
+        Self {
+            quic_bit,
+            packet_type,
+            packet_type_bytes,
+            packet_number,
+            flags,
+            token,
+            length,
+            version,
+            scil,
+            dcil,
+            scid,
+            dcid
+        }
+    }
+}
+
 // The token carried in an Initial packet can either be a retry token from a Retry packet, or one originally provided by the server in a NEW_TOKEN frame used when resuming a connection (e.g., for address validation purposes). Retry and resumption tokens typically contain encoded metadata to check the token's validity when it is used, but this metadata and its format is implementation specific. For that, Token includes a general-purpose details field.
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct Token {
-    // TODO: Rename to 'type' in serialization
+    #[serde(rename = "type")]
     token_type: Option<TokenType>,
 
     /// Decoded fields included in the token (typically: peer's IP address, creation time).
-    // TODO: serde flatten
-    details: Option<HashMap<String, String>>,
+    // TODO: Check if HashMap typing is correct
+    #[serde(flatten)]
+    details: HashMap<String, String>,
 
     raw: Option<RawInfo>
 }
 
+impl Token {
+    pub fn new(token_type: Option<TokenType>, details: Option<HashMap<String, String>>, raw: Option<RawInfo>) -> Self {
+        let details = details.unwrap_or_default();
+
+        Self { token_type, details, raw }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TokenType {
     Retry,
     Resumption
@@ -140,30 +214,43 @@ pub enum TokenType {
 // The stateless reset token is carried in stateless reset packets, in transport parameters and in NEW_CONNECTION_ID frames.
 pub type StatelessResetToken = HexString;
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum KeyType {
     ServerInitialSecret,
     ClientInitialSecret,
     ServerHandshakeSecret,
     ClientHandshakeSecret,
-    // TODO: Rename all the following in serde
+    #[serde(rename = "server_0rtt_secret")]
     ServerZeroRttSecret,
+    #[serde(rename = "client_0rtt_secret")]
     ClientZeroRttSecret,
+    #[serde(rename = "server_1rtt_secret")]
     ServerOneRttSecret,
+    #[serde(rename = "client_1rtt_secret")]
     ClientOneRttSecret,
 }
 
-// TODO: Rename all in serde
+#[derive(Serialize)]
 pub enum Ecn {
+    #[serde(rename = "Not-ECT")]
     NotEct,
+    #[serde(rename = "ECT(1)")]
     EctOne,
+    #[serde(rename = "ECT(0)")]
     EctZero,
+    #[serde(rename = "CE")]
     Ce
 }
 
+#[derive(Serialize)]
+#[serde(untagged)]
 pub enum QuicFrame {
     QuicBaseFrame(QuicBaseFrame)
 }
 
+#[derive(Serialize)]
+#[serde(untagged)]
 pub enum QuicBaseFrame {
     PaddingFrame(PaddingFrame),
     PingFrame(PingFrame),
@@ -189,6 +276,8 @@ pub enum QuicBaseFrame {
     DatagramFrame(DatagramFrame)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FrameType {
     Padding,
     Ping,
@@ -215,22 +304,37 @@ pub enum FrameType {
 }
 
 /// In QUIC, PADDING frames are simply identified as a single byte of value 0. As such, each padding byte could be theoretically interpreted and logged as an individual PaddingFrame.However, as this leads to heavy logging overhead, implementations should instead emit just a single PaddingFrame and set the raw.payload_length property to the amount of PADDING bytes/frames included in the packet.
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct PaddingFrame {
-    // TODO: Set to Padding
     frame_type: FrameType,
     raw: Option<RawInfo>
 }
 
+impl PaddingFrame {
+    pub fn new(raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::Padding, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct PingFrame {
-    // TODO: Set to Ping
     frame_type: FrameType,
     raw: Option<RawInfo>
+}
+
+impl PingFrame {
+    pub fn new(raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::Ping, raw }
+    }
 }
 
 type AckRange = Vec<u64>;
 
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct AckFrame {
-    // TODO: Set to Ack
     frame_type: FrameType,
 
     /// In ms
@@ -246,13 +350,19 @@ pub struct AckFrame {
     raw: Option<RawInfo>
 }
 
+impl AckFrame {
+    pub fn new(ack_delay: Option<f32>, acked_ranges: Option<Vec<AckRange>>, ect1: Option<u64>, ect0: Option<u64>, ce: Option<u64>, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::Ack, ack_delay, acked_ranges, ect1, ect0, ce, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct ResetStreamFrame {
-    // TODO: Set to ResetStream
     frame_type: FrameType,
     stream_id: u64,
     error_code: ApplicationError,
 
-    // TODO: If error_code == Unknown
     error_code_bytes: Option<u64>,
 
     /// In bytes
@@ -260,35 +370,70 @@ pub struct ResetStreamFrame {
     raw: Option<RawInfo>
 }
 
+impl ResetStreamFrame {
+    pub fn new(stream_id: u64, error_code: ApplicationError, error_code_bytes: Option<u64>, final_size: u64, raw: Option<RawInfo>) -> Self {
+        if error_code == ApplicationError::Unknown && error_code_bytes.is_none() {
+            panic!("When the error_code is 'unknown', provide a value for error_code_bytes");
+        }
+
+        Self { frame_type: FrameType::ResetStream, stream_id, error_code, error_code_bytes, final_size, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct StopSendingFrame {
-    // TODO: Set to StopSending
     frame_type: FrameType,
     stream_id: u64,
     error_code: ApplicationError,
 
-    // TODO: If error_code == Unknown
     error_code_bytes: Option<u64>,
 
     raw: Option<RawInfo>
 }
 
+impl StopSendingFrame {
+    pub fn new(stream_id: u64, error_code: ApplicationError, error_code_bytes: Option<u64>, raw: Option<RawInfo>) -> Self {
+        if error_code == ApplicationError::Unknown && error_code_bytes.is_none() {
+            panic!("When the error_code is 'unknown', give error_code_bytes a value");
+        }
+
+        Self { frame_type: FrameType::StopSending, stream_id, error_code, error_code_bytes, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct CryptoFrame {
-    // TODO: Set to Crypto
     frame_type: FrameType,
     offset: u64,
     length: u64,
     raw: Option<RawInfo>
 }
 
+impl CryptoFrame {
+    pub fn new(offset: u64, length: u64, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::Crypto, offset, length, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct NewTokenFrame {
-    // TODO: Set to NewToken
     frame_type: FrameType,
     token: Token,
     raw: Option<RawInfo>
 }
 
+impl NewTokenFrame {
+    pub fn new(token: Token, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::NewToken, token, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct StreamFrame {
-    // TODO: Set to Stream
     frame_type: FrameType,
     stream_id: u64,
 
@@ -299,59 +444,109 @@ pub struct StreamFrame {
 
     // This MAY be set any time, but MUST only be set if the value is true
     // If absent, the value MUST be assumed to be false
-    // TODO: Set default to false
-    fin: Option<bool>,
+    fin: bool,
     raw: Option<RawInfo>
 }
 
+impl StreamFrame {
+    pub fn new(stream_id: u64, offset: u64, length: u64, fin: Option<bool>, raw: Option<RawInfo>) -> Self {
+        let fin = fin.unwrap_or_else(|| false);
+
+        Self { frame_type: FrameType::Stream, stream_id, offset, length, fin, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct MaxDataFrame {
-    // TODO: Set to MaxData
     frame_type: FrameType,
     maximum: u64,
     raw: Option<RawInfo>
 }
 
+impl MaxDataFrame {
+    pub fn new(maximum: u64, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::MaxData, maximum, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct MaxStreamDataFrame {
-    // TODO: Set to MaxStreamData
     frame_type: FrameType,
     stream_id: u64,
     maximum: u64,
     raw: Option<RawInfo>
 }
 
+impl MaxStreamDataFrame {
+    pub fn new(stream_id: u64, maximum: u64, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::MaxStreamData, stream_id, maximum, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct MaxStreamsFrame {
-    // TODO: Set to MaxStreams
     frame_type: FrameType,
     stream_type: StreamType,
     maximum: u64,
     raw: Option<RawInfo>
 }
 
+impl MaxStreamsFrame {
+    pub fn new(stream_type: StreamType, maximum: u64, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::MaxStreams, stream_type, maximum, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct DataBlockedFrame {
-    // TODO: Set to DataBlocked
     frame_type: FrameType,
     limit: u64,
     raw: Option<RawInfo>
 }
 
+impl DataBlockedFrame {
+    pub fn new(limit: u64, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::DataBlocked, limit, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct StreamDataBlockedFrame {
-    // TODO: Set to StreamDataBlocked
     frame_type: FrameType,
     stream_id: u64,
     limit: u64,
     raw: Option<RawInfo>
 }
 
+impl StreamDataBlockedFrame {
+    pub fn new(stream_id: u64, limit: u64, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::StreamDataBlocked, stream_id, limit, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct StreamsBlockedFrame {
-    // TODO: Set to StreamsBlocked
     frame_type: FrameType,
     stream_type: StreamType,
     limit: u64,
     raw: Option<RawInfo>
 }
 
+impl StreamsBlockedFrame {
+    pub fn new(stream_type: StreamType, limit: u64, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::StreamsBlocked, stream_type, limit, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct NewConnectionIdFrame {
-    // TODO: Set to NewConnectionId
     frame_type: FrameType,
     sequence_number: u32,
     retire_prior_to: u32,
@@ -363,15 +558,29 @@ pub struct NewConnectionIdFrame {
     raw: Option<RawInfo>
 }
 
+impl NewConnectionIdFrame {
+    pub fn new(sequence_number: u32, retire_prior_to: u32, connection_id_length: Option<u8>, connection_id: ConnectionId, stateless_reset_token: Option<StatelessResetToken>, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::NewConnectionId, sequence_number, retire_prior_to, connection_id_length, connection_id, stateless_reset_token, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct RetireConnectionIdFrame {
-    // TODO: Set to RetireConnectionId
     frame_type: FrameType,
     sequence_number: u32,
     raw: Option<RawInfo>
 }
 
+impl RetireConnectionIdFrame {
+    pub fn new(sequence_number: u32, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::RetireConnectionId, sequence_number, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct PathChallengeFrame {
-    // TODO: Set to PathChallenge
     frame_type: FrameType,
 
     // Always 64 bits
@@ -379,8 +588,15 @@ pub struct PathChallengeFrame {
     raw: Option<RawInfo>
 }
 
+impl PathChallengeFrame {
+    pub fn new(data: Option<HexString>, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::PathChallenge, data, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct PathResponseFrame {
-    // TODO: Set to PathResponse
     frame_type: FrameType,
 
     // Always 64 bits
@@ -388,60 +604,114 @@ pub struct PathResponseFrame {
     raw: Option<RawInfo>
 }
 
+impl PathResponseFrame {
+    pub fn new(data: Option<HexString>, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::PathResponse, data, raw }
+    }
+}
+
+#[derive(PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ErrorSpace {
     Transport,
     Application
 }
 
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct ConnectionCloseFrame {
-    // TODO: Set to ConnectionClose
     frame_type: FrameType,
     error_space: Option<ErrorSpace>,
-    // TODO
     error_code: Option<Error>,
 
-    // TODO: Only if error_code == Unknown
     error_code_bytes: Option<u64>,
 
     reason: Option<String>,
-    reason_bytes: HexString,
+    reason_bytes: Option<HexString>,
 
-    // TODO: When error_space == Transport
-    // TODO
     trigger_frame_type: Option<TriggerFrameType>,
     raw: Option<RawInfo>
 }
 
+impl ConnectionCloseFrame {
+    pub fn new(
+        error_space: Option<ErrorSpace>,
+        error_code: Option<Error>,
+        error_code_bytes: Option<u64>,
+        reason: Option<String>,
+        reason_bytes: Option<HexString>,
+        trigger_frame_type: Option<TriggerFrameType>,
+        raw: Option<RawInfo>
+    ) -> Self {
+        if (error_code == Some(Error::ApplicationError(ApplicationError::Unknown)) || error_code == Some(Error::TransportError(TransportError::Unknown))) && error_code_bytes.is_none() {
+            panic!("When the error_code is 'unknown', provide a value for error_code_bytes");
+        }
+
+        if error_space == Some(ErrorSpace::Transport) && trigger_frame_type.is_none() {
+            panic!("When the error_space is 'transport', provide a value for trigger_frame_type");
+        }
+
+        Self { frame_type: FrameType::ConnectionClose, error_space, error_code, error_code_bytes, reason, reason_bytes, trigger_frame_type, raw }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
 pub enum TriggerFrameType {
     U64(u64),
     Text(String)
 }
 
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct HandshakeDoneFrame {
-    // TODO: Set to HandshakeDone
     frame_type: FrameType,
     raw: Option<RawInfo>
 }
 
+impl HandshakeDoneFrame {
+    pub fn new(raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::HandshakeDone, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct UnknownFrame {
-    // TODO: Set to Unknown
     frame_type: FrameType,
     frame_type_bytes: u64,
     raw: Option<RawInfo>
 }
 
+impl UnknownFrame {
+    pub fn new(frame_type_bytes: u64, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::Unknown, frame_type_bytes, raw }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct DatagramFrame {
-    // TODO: Set to Datagram
     frame_type: FrameType,
     length: Option<u64>,
     raw: Option<RawInfo>
 }
 
+impl DatagramFrame {
+    pub fn new(length: Option<u64>, raw: Option<RawInfo>) -> Self {
+        Self { frame_type: FrameType::Datagram, length, raw }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum StreamType {
     Unidirectional,
     Bidirectional
 }
 
+#[derive(PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TransportError {
     NoError,
     InternalError,
@@ -463,6 +733,8 @@ pub enum TransportError {
     Unknown
 }
 
+#[derive(PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ApplicationError {
     Unknown
 }
@@ -470,22 +742,30 @@ pub enum ApplicationError {
 /// All strings from "crypto_error_0x100" to "crypto_error_0x1ff".
 pub type CryptoError = String;
 
+#[derive(PartialEq, Eq, Serialize)]
+#[serde(untagged)]
 pub enum ConnectionError {
     TransportError(TransportError),
     CryptoError(CryptoError)
 }
 
+#[derive(PartialEq, Eq, Serialize)]
+#[serde(untagged)]
 pub enum Error {
     TransportError(TransportError),
     CryptoError(CryptoError),
     ApplicationError(ApplicationError)
 }
 
+#[derive(Serialize)]
+#[serde(untagged)]
 pub enum ConnectionState {
     BaseConnectionState(BaseConnectionState),
     GranularConnectionState(GranularConnectionState)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum BaseConnectionState {
     /// Initial packet sent/received.
     Attempted,
@@ -502,6 +782,8 @@ pub enum BaseConnectionState {
     Closed
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum GranularConnectionState {
     /// Client sent Handshake packet OR 
     /// client used connection ID chosen by the server OR 
@@ -528,17 +810,23 @@ pub enum GranularConnectionState {
     Closed
 }
 
+#[derive(Serialize)]
+#[serde(untagged)]
 pub enum StreamState {
     BaseStreamState(BaseStreamState),
     GranularStreamState(GranularStreamState)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum BaseStreamState {
     Idle,
     Open,
     Closed
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum GranularStreamState {
     // Bidirectional stream states, RFC 9000 Section 3.4.
     HalfClosedLocal,
@@ -564,16 +852,28 @@ pub enum GranularStreamState {
     Destroyed
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum StreamSide {
     Sending,
     Receiving
 }
 
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct AlpnIdentifier {
     byte_value: Option<HexString>,
     string_value: Option<String>
 }
 
+impl AlpnIdentifier {
+    pub fn new(byte_value: Option<HexString>, string_value: Option<String>) -> Self {
+        Self { byte_value, string_value }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct PreferredAddress {
     ip_v4: Option<IpAddress>,
     port_v4: Option<u16>,
@@ -583,11 +883,27 @@ pub struct PreferredAddress {
     stateless_reset_token: StatelessResetToken
 }
 
+impl PreferredAddress {
+    pub fn new(ip_v4: Option<IpAddress>, port_v4: Option<u16>, ip_v6: Option<IpAddress>, port_v6: Option<u16>, connection_id: ConnectionId, stateless_reset_token: StatelessResetToken) -> Self {
+        Self { ip_v4, port_v4, ip_v6, port_v6, connection_id, stateless_reset_token }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Serialize)]
 pub struct UnknownParameter {
     id: u64,
     value: Option<HexString>
 }
 
+impl UnknownParameter {
+    pub fn new(id: u64, value: Option<HexString>) -> Self {
+        Self { id, value }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ConnectionCloseTrigger {
     IdleTimeout,
     Application,
@@ -600,6 +916,8 @@ pub enum ConnectionCloseTrigger {
     Unspecified
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PacketSentTrigger {
     // RFC 9002 Section 6.1.1
     RetransmitReordered,
@@ -613,11 +931,15 @@ pub enum PacketSentTrigger {
     CcBandwidthProbe
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PacketReceivedTrigger {
     // If packet was buffered because it couldn't be decrypted before
     KeysAvailable
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PacketDroppedTrigger {
     InternalError,
     Rejected,
@@ -630,6 +952,8 @@ pub enum PacketDroppedTrigger {
     General
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PacketBufferedTrigger {
     /// Indicates the parser cannot keep up, temporarily buffers packet for later processing
     Backpressure,
@@ -637,6 +961,8 @@ pub enum PacketBufferedTrigger {
     KeysUnavailable
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum KeyUpdateTrigger {
     // (e.g., initial, handshake and 0-RTT keys are generated by TLS)
     Tls,
@@ -644,6 +970,8 @@ pub enum KeyUpdateTrigger {
     LocalUpdate
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum KeyDiscardTrigger {
     // (e.g., initial, handshake and 0-RTT keys are generated by TLS)
     Tls,
@@ -651,6 +979,8 @@ pub enum KeyDiscardTrigger {
     LocalUpdate
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PacketLostTrigger {
     ReorderingThreshold,
     TimeThreshold,
@@ -658,12 +988,16 @@ pub enum PacketLostTrigger {
     PtoExpired
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DataLocation {
     Application,
     Transport,
     Network
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DataMovedAdditionalInfo {
     FinSet,
     StreamReset
@@ -671,6 +1005,8 @@ pub enum DataMovedAdditionalInfo {
 
 /// Note that MigrationState does not describe a full state machine.
 /// These entries are not necessarily chronological, nor will they always all appear during a connection migration attempt.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum MigrationState {
     /// Probing packets are sent, migration not initiated yet
     ProbingStarted,
@@ -686,17 +1022,23 @@ pub enum MigrationState {
     MigrationComplete
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TimerType {
     Ack,
     Pto
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum EventType {
     Set,
     Expired,
     Cancelled
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum EcnState {
     /// ECN testing in progress
     Testing,
