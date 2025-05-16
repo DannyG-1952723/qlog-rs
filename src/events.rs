@@ -35,9 +35,7 @@ impl Event {
     // Assumes default TimeFormat (relative to epoch, epoch = "1970-01-01T00:00:00.000Z")
 	// TODO: Base 'time' value upon chosen TimeFormat
     #[allow(dead_code)]
-	fn new(event_name: &str, event_data: ProtocolEventData, group_id: Option<u64>) -> Self {
-        let group_id = group_id.map(|id| id.to_string());
-
+	fn new(event_name: &str, event_data: ProtocolEventData, group_id: Option<String>) -> Self {
 		Self {
 			time: Utc::now().timestamp_millis(),
 			name: event_name.to_string(),
@@ -114,6 +112,7 @@ struct SystemInformation {
 #[cfg(feature = "moq-transfork")]
 impl Event {
     fn new_moq(event_name: &str, event_data: MoqEventData, group_id: u64) -> Self {
+        let group_id = group_id.to_string();
         Self::new(format!("{MOQ_VERSION_STRING}:{event_name}").as_str(), ProtocolEventData::MoqEventData(event_data), Some(group_id))
     }
 
@@ -280,29 +279,31 @@ impl Event {
 // TODO: Maybe pass a group ID
 #[cfg(feature = "quic-10")]
 impl Event {
-    fn new_quic_10(event_name: &str, event_data: Quic10EventData) -> Self {
+    fn new_quic_10(event_name: &str, event_data: Quic10EventData, group_id: Option<String>) -> Self {
         Self::new(
             format!("{QUIC_10_VERSION_STRING}:{event_name}").as_str(), 
             ProtocolEventData::Quic10EventData(event_data),
-            None
+            group_id
         )
     }
 
-    pub fn quic_10_server_listening(ip_v4: Option<IpAddress>, port_v4: Option<u16>, ip_v6: Option<IpAddress>, port_v6: Option<u16>, retry_required: Option<bool>) -> Self {
+    pub fn quic_10_server_listening(ip_v4: Option<IpAddress>, port_v4: Option<u16>, ip_v6: Option<IpAddress>, port_v6: Option<u16>, retry_required: Option<bool>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "server_listening",
             Quic10EventData::ServerListening(
                 ServerListening::new(ip_v4, port_v4, ip_v6, port_v6, retry_required)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_connection_started(local: PathEndpointInfo, remote: PathEndpointInfo) -> Self {
+    pub fn quic_10_connection_started(local: PathEndpointInfo, remote: PathEndpointInfo, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "connection_started",
             Quic10EventData::ConnectionStarted(
                 ConnectionStarted::new(local, remote)
-            )
+            ),
+            cid
         )
     }
 
@@ -313,7 +314,8 @@ impl Event {
         code_bytes: Option<u32>,
         internal_code: Option<u32>,
         reason: Option<String>,
-        trigger: Option<ConnectionCloseTrigger>
+        trigger: Option<ConnectionCloseTrigger>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "connection_closed",
@@ -327,70 +329,78 @@ impl Event {
                     reason,
                     trigger
                 )
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_connection_id_updated(owner: Owner, old: Option<ConnectionId>, new: Option<ConnectionId>) -> Self {
+    pub fn quic_10_connection_id_updated(owner: Owner, old: Option<ConnectionId>, new: Option<ConnectionId>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "connection_id_updated", 
             Quic10EventData::ConnectionIdUpdated(
                 ConnectionIdUpdated::new(owner, old, new)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_spin_bit_updated(state: bool) -> Self {
+    pub fn quic_10_spin_bit_updated(state: bool, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "spin_bit_updated",
             Quic10EventData::SpinBitUpdated(
                 SpinBitUpdated::new(state)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_connection_state_updated(old: Option<ConnectionState>, new: ConnectionState) -> Self {
+    pub fn quic_10_connection_state_updated(old: Option<ConnectionState>, new: ConnectionState, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "connection_state_updated",
             Quic10EventData::ConnectionStateUpdated(
                 ConnectionStateUpdated::new(old, new)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_path_assigned(path_id: PathId, path_remote: Option<PathEndpointInfo>, path_local: Option<PathEndpointInfo>) -> Self {
+    pub fn quic_10_path_assigned(path_id: PathId, path_remote: Option<PathEndpointInfo>, path_local: Option<PathEndpointInfo>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "path_assigned",
             Quic10EventData::PathAssigned(
                 PathAssigned::new(path_id, path_remote, path_local)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_mtu_updated(old: Option<u32>, new: u32, done: Option<bool>) -> Self {
+    pub fn quic_10_mtu_updated(old: Option<u32>, new: u32, done: Option<bool>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "mtu_updated",
             Quic10EventData::MtuUpdated(
                 MtuUpdated::new(old, new, done)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_version_information(server_versions: Option<Vec<QuicVersion>>, client_versions: Option<Vec<QuicVersion>>, chosen_version: Option<QuicVersion>) -> Self {
+    pub fn quic_10_version_information(server_versions: Option<Vec<QuicVersion>>, client_versions: Option<Vec<QuicVersion>>, chosen_version: Option<QuicVersion>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "version_information",
             Quic10EventData::VersionInformation(
                 VersionInformation::new(server_versions, client_versions, chosen_version)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_alpn_information(server_alpns: Option<Vec<AlpnIdentifier>>, client_alpns: Option<Vec<AlpnIdentifier>>, chosen_alpn: Option<AlpnIdentifier>) -> Self {
+    pub fn quic_10_alpn_information(server_alpns: Option<Vec<AlpnIdentifier>>, client_alpns: Option<Vec<AlpnIdentifier>>, chosen_alpn: Option<AlpnIdentifier>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "alpn_information",
             Quic10EventData::AlpnInformation(
                 AlpnInformation::new(server_alpns, client_alpns, chosen_alpn)
-            )
+            ),
+            cid
         )
     }
 
@@ -418,7 +428,8 @@ impl Event {
         preferred_address: Option<PreferredAddress>,
         unknown_parameters: Option<Vec<UnknownParameter>>,
         max_datagram_frame_size: Option<u64>,
-        grease_quic_bit: Option<bool>
+        grease_quic_bit: Option<bool>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "parameters_set",
@@ -449,7 +460,8 @@ impl Event {
                     max_datagram_frame_size,
                     grease_quic_bit
                 )
-            )
+            ),
+            cid
         )
     }
 
@@ -465,7 +477,8 @@ impl Event {
         initial_max_streams_bidi: Option<u64>,
         initial_max_streams_uni: Option<u64>,
         max_datagram_frame_size: Option<u64>,
-        grease_quic_bit: Option<bool>
+        grease_quic_bit: Option<bool>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "parameters_restored",
@@ -484,7 +497,8 @@ impl Event {
                     max_datagram_frame_size,
                     grease_quic_bit
                 )
-            )
+            ),
+            cid
         )
     }
 
@@ -496,13 +510,15 @@ impl Event {
         raw: Option<RawInfo>,
         datagram_id: Option<u32>,
         is_mtu_probe_packet: Option<bool>,
-        trigger: Option<PacketSentTrigger>
+        trigger: Option<PacketSentTrigger>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "packet_sent",
             Quic10EventData::PacketSent(
                 PacketSent::new(header, frames, stateless_reset_token, supported_versions, raw, datagram_id, is_mtu_probe_packet, trigger)
-            )
+            ),
+            cid
         )
     }
 
@@ -513,13 +529,15 @@ impl Event {
         supported_versions: Option<Vec<QuicVersion>>,
         raw: Option<RawInfo>,
         datagram_id: Option<u32>,
-        trigger: Option<PacketReceivedTrigger>
+        trigger: Option<PacketReceivedTrigger>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "packet_received",
             Quic10EventData::PacketReceived(
                 PacketReceived::new(header, frames, stateless_reset_token, supported_versions, raw, datagram_id, trigger)
-            )
+            ),
+            cid
         )
     }
 
@@ -528,76 +546,85 @@ impl Event {
         raw: Option<RawInfo>,
         datagram_id: Option<u32>,
         details: HashMap<String, Vec<u8>>,
-        trigger: Option<PacketDroppedTrigger>
+        trigger: Option<PacketDroppedTrigger>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "packet_dropped",
             Quic10EventData::PacketDropped(
                 PacketDropped::new(header, raw, datagram_id, details, trigger)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_packet_buffered(header: Option<PacketHeader>, raw: Option<RawInfo>, datagram_id: Option<u32>, trigger: Option<PacketBufferedTrigger>) -> Self {
+    pub fn quic_10_packet_buffered(header: Option<PacketHeader>, raw: Option<RawInfo>, datagram_id: Option<u32>, trigger: Option<PacketBufferedTrigger>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "packet_buffered",
             Quic10EventData::PacketBuffered(
                 PacketBuffered::new(header, raw, datagram_id, trigger)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_packets_acked(packet_number_space: Option<PacketNumberSpace>, packet_numbers: Option<Vec<u64>>) -> Self {
+    pub fn quic_10_packets_acked(packet_number_space: Option<PacketNumberSpace>, packet_numbers: Option<Vec<u64>>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "packets_acked",
             Quic10EventData::PacketsAcked(
                 PacketsAcked::new(packet_number_space, packet_numbers)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_udp_datagrams_sent(count: Option<u16>, raw: Option<Vec<RawInfo>>, ecn: Option<Vec<Ecn>>, datagram_ids: Option<Vec<u32>>) -> Self {
+    pub fn quic_10_udp_datagrams_sent(count: Option<u16>, raw: Option<Vec<RawInfo>>, ecn: Option<Vec<Ecn>>, datagram_ids: Option<Vec<u32>>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "udp_datagrams_sent",
             Quic10EventData::UdpDatagramsSent(
                 UdpDatagramsSent::new(count, raw, ecn, datagram_ids)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_udp_datagrams_received(count: Option<u16>, raw: Option<Vec<RawInfo>>, ecn: Option<Vec<Ecn>>, datagram_ids: Option<Vec<u32>>) -> Self {
+    pub fn quic_10_udp_datagrams_received(count: Option<u16>, raw: Option<Vec<RawInfo>>, ecn: Option<Vec<Ecn>>, datagram_ids: Option<Vec<u32>>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "udp_datagrams_received",
             Quic10EventData::UdpDatagramsReceived(
                 UdpDatagramsReceived::new(count, raw, ecn, datagram_ids)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_udp_datagram_dropped(raw: Option<RawInfo>) -> Self {
+    pub fn quic_10_udp_datagram_dropped(raw: Option<RawInfo>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "udp_datagram_dropped",
             Quic10EventData::UdpDatagramDropped(
                 UdpDatagramDropped::new(raw)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_stream_state_updated(stream_id: u64, stream_type: Option<QuicStreamType>, old: Option<StreamState>, new: StreamState, stream_side: Option<StreamSide>) -> Self {
+    pub fn quic_10_stream_state_updated(stream_id: u64, stream_type: Option<QuicStreamType>, old: Option<StreamState>, new: StreamState, stream_side: Option<StreamSide>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "stream_state_updated",
             Quic10EventData::StreamStateUpdated(
                 StreamStateUpdated::new(stream_id, stream_type, old, new, stream_side)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_frames_processed(frames: Vec<QuicFrame>, packet_numbers: Option<Vec<u64>>) -> Self {
+    pub fn quic_10_frames_processed(frames: Vec<QuicFrame>, packet_numbers: Option<Vec<u64>>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "frames_processed",
             Quic10EventData::FramesProcessed(
                 FramesProcessed::new(frames, packet_numbers)
-            )
+            ),
+            cid
         )
     }
 
@@ -608,22 +635,25 @@ impl Event {
         from: Option<DataLocation>,
         to: Option<DataLocation>,
         additional_info: Option<DataMovedAdditionalInfo>,
-        raw: Option<RawInfo>
+        raw: Option<RawInfo>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "stream_data_moved",
             Quic10EventData::StreamDataMoved(
                 StreamDataMoved::new(stream_id, offset, length, from, to, additional_info, raw)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_datagram_data_moved(length: Option<u64>, from: Option<DataLocation>, to: Option<DataLocation>, raw: Option<RawInfo>) -> Self {
+    pub fn quic_10_datagram_data_moved(length: Option<u64>, from: Option<DataLocation>, to: Option<DataLocation>, raw: Option<RawInfo>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "datagram_data_moved",
             Quic10EventData::DatagramDataMoved(
                 DatagramDataMoved::new(length, from, to, raw)
-            )
+            ),
+            cid
         )
     }
 
@@ -632,31 +662,35 @@ impl Event {
         new: MigrationState,
         path_id: Option<PathId>,
         path_remote: Option<PathEndpointInfo>,
-        path_local: Option<PathEndpointInfo>
+        path_local: Option<PathEndpointInfo>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "migration_state_updated",
             Quic10EventData::MigrationStateUpdated(
                 MigrationStateUpdated::new(old, new, path_id, path_remote, path_local)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_key_updated(key_type: KeyType, old: Option<HexString>, new: Option<HexString>, key_phase: Option<u64>, trigger: Option<KeyUpdateTrigger>) -> Self {
+    pub fn quic_10_key_updated(key_type: KeyType, old: Option<HexString>, new: Option<HexString>, key_phase: Option<u64>, trigger: Option<KeyUpdateTrigger>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "key_updated",
             Quic10EventData::KeyUpdated(
                 KeyUpdated::new(key_type, old, new, key_phase, trigger)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_key_discarded(key_type: KeyType, key: Option<HexString>, key_phase: Option<u64>, trigger: Option<KeyDiscardTrigger>) -> Self {
+    pub fn quic_10_key_discarded(key_type: KeyType, key: Option<HexString>, key_phase: Option<u64>, trigger: Option<KeyDiscardTrigger>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "key_discarded",
             Quic10EventData::KeyDiscarded(
                 KeyDiscarded::new(key_type, key, key_phase, trigger)
-            )
+            ),
+            cid
         )
     }
 
@@ -669,7 +703,8 @@ impl Event {
         initial_congestion_window: Option<u64>,
         minimum_congestion_window: Option<u64>,
         loss_reduction_factor: Option<f32>,
-        persistent_congestion_threshold: Option<u16>
+        persistent_congestion_threshold: Option<u16>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "recovery_parameters_set",
@@ -685,7 +720,8 @@ impl Event {
                     loss_reduction_factor,
                     persistent_congestion_threshold
                 )
-            )
+            ),
+            cid
         )
     }
 
@@ -699,7 +735,8 @@ impl Event {
         bytes_in_flight: Option<u64>,
         ssthresh: Option<u64>,
         packets_in_flight: Option<u64>,
-        pacing_rate: Option<u64>
+        pacing_rate: Option<u64>,
+        cid: Option<String>
     ) -> Self {
         Self::new_quic_10(
             "recovery_metrics_updated",
@@ -716,52 +753,58 @@ impl Event {
                     packets_in_flight,
                     pacing_rate
                 )
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_congestion_state_updated(old: Option<String>, new: String, trigger: Option<String>) -> Self {
+    pub fn quic_10_congestion_state_updated(old: Option<String>, new: String, trigger: Option<String>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "congestion_state_updated",
             Quic10EventData::CongestionStateUpdated(
                 CongestionStateUpdated::new(old, new, trigger)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_loss_timer_updated(timer_type: Option<TimerType>, packet_number_space: Option<PacketNumberSpace>, event_type: EventType, delta: Option<f32>) -> Self {
+    pub fn quic_10_loss_timer_updated(timer_type: Option<TimerType>, packet_number_space: Option<PacketNumberSpace>, event_type: EventType, delta: Option<f32>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "loss_timer_updated",
             Quic10EventData::LossTimerUpdated(
                 LossTimerUpdated::new(timer_type, packet_number_space, event_type, delta)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_packet_lost(header: Option<PacketHeader>, frames: Option<Vec<QuicFrame>>, is_mtu_probe_packet: Option<bool>, trigger: Option<PacketLostTrigger>) -> Self {
+    pub fn quic_10_packet_lost(header: Option<PacketHeader>, frames: Option<Vec<QuicFrame>>, is_mtu_probe_packet: Option<bool>, trigger: Option<PacketLostTrigger>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "packet_lost",
             Quic10EventData::PacketLost(
                 PacketLost::new(header, frames, is_mtu_probe_packet, trigger)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_marked_for_retransmit(frames: Vec<QuicFrame>) -> Self {
+    pub fn quic_10_marked_for_retransmit(frames: Vec<QuicFrame>, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "marked_for_retransmit",
             Quic10EventData::MarkedForRetransmit(
                 MarkedForRetransmit::new(frames)
-            )
+            ),
+            cid
         )
     }
 
-    pub fn quic_10_ecn_state_updated(old: Option<EcnState>, new: EcnState) -> Self {
+    pub fn quic_10_ecn_state_updated(old: Option<EcnState>, new: EcnState, cid: Option<String>) -> Self {
         Self::new_quic_10(
             "ecn_state_updated",
             Quic10EventData::EcnStateUpdated(
                 EcnStateUpdated::new(old, new)
-            )
+            ),
+            cid
         )
     }
 }
