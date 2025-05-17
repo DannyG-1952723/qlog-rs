@@ -276,7 +276,6 @@ impl Event {
 	}
 }
 
-// TODO: Maybe pass a group ID
 #[cfg(feature = "quic-10")]
 impl Event {
     fn new_quic_10(event_name: &str, event_data: Quic10EventData, group_id: Option<String>) -> Self {
