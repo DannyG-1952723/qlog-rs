@@ -71,7 +71,7 @@ impl QlogWriter {
         #[cfg(feature = "moq-transfork")]
         return Self::log_moq_event(event);
 
-		let mut qlog_writer = QLOG_WRITER.lock().unwrap();
+		let qlog_writer = QLOG_WRITER.lock().unwrap();
 
 		if !qlog_writer.file_details_written {
 			panic!("Log the qlog file details before logging events, call 'QlogWriter::log_file_details()' somewhere in the beginning of the program");
