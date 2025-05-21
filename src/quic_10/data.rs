@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Result, net::{IpAddr, SocketAddr}};
 
 use serde::Serialize;
 use serde_with::skip_serializing_none;
@@ -77,6 +77,50 @@ pub struct PathEndpointInfo {
 impl PathEndpointInfo {
     pub fn new(ip_v4: Option<IpAddress>, port_v4: Option<u16>, ip_v6: Option<IpAddress>, port_v6: Option<u16>, connection_ids: Vec<ConnectionId>) -> Self {
         Self { ip_v4, port_v4, ip_v6, port_v6, connection_ids }
+    }
+}
+
+// TODO: See what to do with the `connection_ids`
+impl From<IpAddr> for PathEndpointInfo {
+    fn from(value: IpAddr) -> Self {
+        if value.is_ipv4() {
+            Self::new(Some(value.to_string()), None, None, None, Vec::default())
+        }
+        else {
+            Self::new(None, None, Some(value.to_string()), None, Vec::default())
+        }
+    }
+}
+
+// TODO: See what to do with the `connection_ids`
+impl From<Option<IpAddr>> for PathEndpointInfo {
+    fn from(value: Option<IpAddr>) -> Self {
+        match value {
+            Some(ip) => Self::from(ip),
+            None => Self::new(None, None, None, None, Vec::default())
+        }
+    }
+}
+
+// TODO: See what to do with the `connection_ids`
+impl From<SocketAddr> for PathEndpointInfo {
+    fn from(value: SocketAddr) -> Self {
+        if value.is_ipv4() {
+            Self::new(Some(value.ip().to_string()), Some(value.port()), None, None, Vec::default())
+        }
+        else {
+            Self::new(None, None, Some(value.ip().to_string()), Some(value.port()), Vec::default())
+        }
+    }
+}
+
+// TODO: See what to do with the `connection_ids`
+impl From<Result<SocketAddr>> for PathEndpointInfo {
+    fn from(value: Result<SocketAddr>) -> Self {
+        match value {
+            Ok(socket_addr) => Self::from(socket_addr),
+            Err(_) => Self::new(None, None, None, None, Vec::default()),
+        }
     }
 }
 
