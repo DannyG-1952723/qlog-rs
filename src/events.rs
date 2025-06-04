@@ -278,7 +278,7 @@ impl Event {
 
 #[cfg(feature = "quic-10")]
 impl Event {
-    fn new_quic_10(event_name: &str, event_data: Quic10EventData, group_id: Option<String>) -> Self {
+    pub(crate) fn new_quic_10(event_name: &str, event_data: Quic10EventData, group_id: Option<String>) -> Self {
         Self::new(
             format!("{QUIC_10_VERSION_STRING}:{event_name}").as_str(), 
             ProtocolEventData::Quic10EventData(event_data),

@@ -380,6 +380,13 @@ impl PacketSent {
 
         Self { header, frames, stateless_reset_token, supported_versions, raw, datagram_id, is_mtu_probe_packet, trigger }
     }
+
+    pub fn add_frame(&mut self, frame: QuicFrame) {
+        match self.frames.as_mut() {
+            Some(vec) => vec.push(frame),
+            None => self.frames = Some(vec![frame]),
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -411,6 +418,13 @@ impl PacketReceived {
         trigger: Option<PacketReceivedTrigger>
     ) -> Self {
         Self { header, frames, stateless_reset_token, supported_versions, raw, datagram_id, trigger }
+    }
+
+    pub fn add_frame(&mut self, frame: QuicFrame) {
+        match self.frames.as_mut() {
+            Some(vec) => vec.push(frame),
+            None => self.frames = Some(vec![frame]),
+        }
     }
 }
 

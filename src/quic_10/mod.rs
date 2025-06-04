@@ -1,2 +1,2 @@
 pub mod data;
-pub(crate) mod events;
+pub mod events;

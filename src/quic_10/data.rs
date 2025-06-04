@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Result, net::{IpAddr, SocketAddr}};
+use std::{collections::HashMap, fmt::Debug, io::Result, net::{IpAddr, SocketAddr}};
 
 use serde::Serialize;
 use serde_with::skip_serializing_none;
@@ -287,7 +287,7 @@ pub enum Ecn {
     Ce
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum QuicFrame {
     QuicBaseFrame(QuicBaseFrame)
@@ -318,6 +318,35 @@ pub enum QuicBaseFrame {
     HandshakeDoneFrame(HandshakeDoneFrame),
     UnknownFrame(UnknownFrame),
     DatagramFrame(DatagramFrame)
+}
+
+impl Debug for QuicBaseFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PaddingFrame(_) => f.debug_tuple("PaddingFrame").finish(),
+            Self::PingFrame(_) => f.debug_tuple("PingFrame").finish(),
+            Self::AckFrame(_) => f.debug_tuple("AckFrame").finish(),
+            Self::ResetStreamFrame(_) => f.debug_tuple("ResetStreamFrame").finish(),
+            Self::StopSendingFrame(_) => f.debug_tuple("StopSendingFrame").finish(),
+            Self::CryptoFrame(_) => f.debug_tuple("CryptoFrame").finish(),
+            Self::NewTokenFrame(_) => f.debug_tuple("NewTokenFrame").finish(),
+            Self::StreamFrame(_) => f.debug_tuple("StreamFrame").finish(),
+            Self::MaxDataFrame(_) => f.debug_tuple("MaxDataFrame").finish(),
+            Self::MaxStreamDataFrame(_) => f.debug_tuple("MaxStreamDataFrame").finish(),
+            Self::MaxStreamsFrame(_) => f.debug_tuple("MaxStreamsFrame").finish(),
+            Self::DataBlockedFrame(_) => f.debug_tuple("DataBlockedFrame").finish(),
+            Self::StreamDataBlockedFrame(_) => f.debug_tuple("StreamDataBlockedFrame").finish(),
+            Self::StreamsBlockedFrame(_) => f.debug_tuple("StreamsBlockedFrame").finish(),
+            Self::NewConnectionIdFrame(_) => f.debug_tuple("NewConnectionIdFrame").finish(),
+            Self::RetireConnectionIdFrame(_) => f.debug_tuple("RetireConnectionIdFrame").finish(),
+            Self::PathChallengeFrame(_) => f.debug_tuple("PathChallengeFrame").finish(),
+            Self::PathResponseFrame(_) => f.debug_tuple("PathResponseFrame").finish(),
+            Self::ConnectionCloseFrame(_) => f.debug_tuple("ConnectionCloseFrame").finish(),
+            Self::HandshakeDoneFrame(_) => f.debug_tuple("HandshakeDoneFrame").finish(),
+            Self::UnknownFrame(_) => f.debug_tuple("UnknownFrame").finish(),
+            Self::DatagramFrame(_) => f.debug_tuple("DatagramFrame").finish(),
+        }
+    }
 }
 
 #[derive(Serialize)]
