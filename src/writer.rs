@@ -177,13 +177,9 @@ impl QlogWriter {
         let mut qlog_writer = QLOG_WRITER.lock().unwrap();
 
         let key = format!("{}:{}", cid, packet_num);
-        let log_key = format!("{}...:{}", cid.get(0..5).unwrap(), packet_num);
 
         match qlog_writer.cached_quic_packets.get_mut(&key) {
-            Some(packet) => {
-                // println!("Added {:?} frame to packet {}", frame, log_key);
-                packet.add_frame(frame)
-            },
+            Some(packet) => packet.add_frame(frame),
             None => panic!("Tried to add a frame to a non-existing packet")
         }
     }
@@ -219,7 +215,7 @@ impl QlogWriter {
 #[cfg(feature = "quic-10")]
 #[derive(Clone, Copy, Debug)]
 pub enum PacketNum {
-    Number(u64),
+    Number(PacketNumSpace, u64),
     Retry,
     StatelessReset,
     VersionNegotiation,
@@ -230,11 +226,30 @@ pub enum PacketNum {
 impl std::fmt::Display for PacketNum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PacketNum::Number(n) => write!(f, "{}", n),
+            PacketNum::Number(s, n) => write!(f, "{}:{}", s, n),
             PacketNum::Retry => write!(f, "Retry"),
             PacketNum::StatelessReset => write!(f, "StatelessReset"),
             PacketNum::VersionNegotiation => write!(f, "VersionNegotiation"),
             PacketNum::Unknown => write!(f, "Unknown"),
+        }
+    }
+}
+
+#[cfg(feature = "quic-10")]
+#[derive(Clone, Copy, Debug)]
+pub enum PacketNumSpace {
+    Initial,
+    Handshake,
+    Data
+}
+
+#[cfg(feature = "quic-10")]
+impl std::fmt::Display for PacketNumSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PacketNumSpace::Initial => write!(f, "Initial"),
+            PacketNumSpace::Handshake => write!(f, "Handshake"),
+            PacketNumSpace::Data => write!(f, "Data"),
         }
     }
 }
