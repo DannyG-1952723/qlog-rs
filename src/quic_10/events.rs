@@ -387,6 +387,10 @@ impl PacketSent {
             None => self.frames = Some(vec![frame]),
         }
     }
+
+    pub fn update_packet_length(&mut self, payload_length: u16) {
+        self.header.update_packet_length(payload_length);
+    }
 }
 
 #[skip_serializing_none]

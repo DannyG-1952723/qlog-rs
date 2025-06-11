@@ -36,8 +36,12 @@ impl Event {
 	// TODO: Base 'time' value upon chosen TimeFormat
     #[allow(dead_code)]
 	fn new(event_name: &str, event_data: ProtocolEventData, group_id: Option<String>) -> Self {
-		Self {
-			time: Utc::now().timestamp_millis(),
+		Self::new_with_time(event_name, event_data, group_id, Utc::now().timestamp_millis())
+	}
+
+    fn new_with_time(event_name: &str, event_data: ProtocolEventData, group_id: Option<String>, time: i64) -> Self {
+        Self {
+			time,
 			name: event_name.to_string(),
 			data: event_data,
 			// TODO: Maybe add a path ID
@@ -47,7 +51,7 @@ impl Event {
 			system_info: None,
 			custom_fields: HashMap::new()
 		}
-	}
+    }
 
     pub fn get_name(&self) -> &String {
 		&self.name
@@ -283,6 +287,15 @@ impl Event {
             format!("{QUIC_10_VERSION_STRING}:{event_name}").as_str(), 
             ProtocolEventData::Quic10EventData(event_data),
             group_id
+        )
+    }
+
+    pub(crate) fn new_quic_10_with_time(event_name: &str, event_data: Quic10EventData, group_id: Option<String>, time: i64) -> Self {
+        Self::new_with_time(
+            format!("{QUIC_10_VERSION_STRING}:{event_name}").as_str(), 
+            ProtocolEventData::Quic10EventData(event_data),
+            group_id,
+            time
         )
     }
 

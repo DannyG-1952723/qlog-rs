@@ -3,12 +3,15 @@ use std::{collections::VecDeque, env, fs::File, io::{BufWriter, Write}, sync::{m
 #[cfg(feature = "quic-10")]
 use std::collections::HashMap;
 
+#[cfg(feature = "quic-10")]
+use chrono::Utc;
+
 use serde::Serialize;
 
 use crate::{events::Event, logfile::{CommonFields, LogFile, QlogFileSeq, TraceSeq, VantagePoint}, quic_10::data::Quic10EventData};
 
 #[cfg(feature = "quic-10")]
-use crate::quic_10::{data::QuicFrame, events::PacketSent};
+use crate::quic_10::{data::QuicFrame, events::{PacketReceived, PacketSent}};
 
 #[cfg(feature = "moq-transfork")]
 use crate::moq_transfork::data::StreamType;
@@ -22,7 +25,9 @@ pub struct QlogWriter {
     #[allow(dead_code)]
 	cached_events: VecDeque<Event>,
     #[cfg(feature = "quic-10")]
-    cached_quic_packets: HashMap<String, PacketSent>
+    cached_sent_quic_packets: HashMap<String, PacketSent>,
+    #[cfg(feature = "quic-10")]
+    cached_received_quic_packets: HashMap<String, (PacketReceived, i64)>
 }
 
 impl QlogWriter {
@@ -54,7 +59,9 @@ impl QlogWriter {
                             file_details_written: false,
                             cached_events: VecDeque::default(),
                             #[cfg(feature = "quic-10")]
-                            cached_quic_packets: HashMap::default()
+                            cached_sent_quic_packets: HashMap::default(),
+                            #[cfg(feature = "quic-10")]
+                            cached_received_quic_packets: HashMap::default()
                         }
                     },
 					Err(e) => panic!("Error creating qlog file: {e}")
@@ -65,7 +72,9 @@ impl QlogWriter {
                 file_details_written: true,
                 cached_events: VecDeque::default(),
                 #[cfg(feature = "quic-10")]
-                cached_quic_packets: HashMap::default()
+                cached_sent_quic_packets: HashMap::default(),
+                #[cfg(feature = "quic-10")]
+                cached_received_quic_packets: HashMap::default()
             }
 		}
 	}
@@ -160,31 +169,31 @@ impl QlogWriter {
 
 #[cfg(feature = "quic-10")]
 impl QlogWriter {
-    pub fn cache_quic_packet(cid: String, packet_num: PacketNum, packet: PacketSent) {
+    pub fn cache_quic_packet_sent(cid: String, packet_num: PacketNum, packet: PacketSent) {
         let mut qlog_writer = QLOG_WRITER.lock().unwrap();
 
         let key = format!("{}:{}", cid, packet_num);
         let log_key = format!("{}...:{}", cid.get(0..5).unwrap(), packet_num);
 
-        let existing_value = qlog_writer.cached_quic_packets.insert(key, packet);
+        let existing_value = qlog_writer.cached_sent_quic_packets.insert(key, packet);
 
         if existing_value.is_some() {
             println!("KEY {} ALREADY EXISTS, OVERWROTE QUIC PACKET", log_key);
         }
     }
 
-    pub fn quic_packet_add_frame(cid: String, packet_num: PacketNum, frame: QuicFrame) {
+    pub fn quic_packet_sent_add_frame(cid: String, packet_num: PacketNum, frame: QuicFrame) {
         let mut qlog_writer = QLOG_WRITER.lock().unwrap();
 
         let key = format!("{}:{}", cid, packet_num);
 
-        match qlog_writer.cached_quic_packets.get_mut(&key) {
+        match qlog_writer.cached_sent_quic_packets.get_mut(&key) {
             Some(packet) => packet.add_frame(frame),
             None => panic!("Tried to add a frame to a non-existing packet")
         }
     }
 
-    pub fn log_quic_packets(cid: String, packet_nums: Vec<PacketNum>) {
+    pub fn log_quic_packets_sent(cid: String, packet_nums: Vec<PacketNum>) {
         for packet_num in packet_nums {
             // Need to introduce this extra scope so the lock gets dropped before logging
             let event = {
@@ -193,9 +202,9 @@ impl QlogWriter {
                 let key = format!("{}:{}", cid, packet_num);
                 let log_key = format!("{}...:{}", cid.get(0..5).unwrap(), packet_num);
 
-                match qlog_writer.cached_quic_packets.remove(&key) {
+                match qlog_writer.cached_sent_quic_packets.remove(&key) {
                     Some(packet) => {
-                        println!("QUIC packets still cached: {:?}", qlog_writer.cached_quic_packets.keys());
+                        // println!("QUIC packets still cached: {:?}", qlog_writer.cached_sent_quic_packets.keys());
                         Some(Event::new_quic_10("packet_sent", Quic10EventData::PacketSent(packet), Some(cid.clone())))
                     },
                     None => {
@@ -208,6 +217,76 @@ impl QlogWriter {
             if let Some(e) = event {
                 QlogWriter::log_event(e);
             }
+        }
+    }
+
+    pub fn update_packet_length(cid: String, packet_num: PacketNum, payload_length: u16) {
+        let mut qlog_writer = QLOG_WRITER.lock().unwrap();
+
+        let key = format!("{}:{}", cid, packet_num);
+
+        let packet = qlog_writer.cached_sent_quic_packets.get_mut(&key);
+
+        match packet {
+            Some(packet_sent) => packet_sent.update_packet_length(payload_length),
+            None => println!("Can't update packet length: no such packet exists"),
+        }
+    }
+
+    pub fn cache_quic_packet_received(cid: String, packet_num: PacketNum, packet: PacketReceived) {
+        let mut qlog_writer = QLOG_WRITER.lock().unwrap();
+
+        let time = Utc::now().timestamp_millis();
+
+        let key = format!("{}:{}", cid, packet_num);
+        let log_key = format!("{}...:{}", cid.get(0..5).unwrap(), packet_num);
+
+        // println!("Received packet ({})", log_key);
+
+        let existing_value = qlog_writer.cached_received_quic_packets.insert(key, (packet, time));
+
+        if existing_value.is_some() {
+            println!("KEY {} ALREADY EXISTS, OVERWROTE QUIC PACKET", log_key);
+        }
+    }
+
+    pub fn quic_packet_received_add_frame(cid: String, packet_num: PacketNum, frame: QuicFrame) {
+        let mut qlog_writer = QLOG_WRITER.lock().unwrap();
+
+        let key = format!("{}:{}", cid, packet_num);
+        let log_key = format!("{}...:{}", cid.get(0..5).unwrap(), packet_num);
+
+        match qlog_writer.cached_received_quic_packets.get_mut(&key) {
+            Some((packet, _)) => {
+                // println!("Added {:?} to packet {}", frame, log_key);
+                packet.add_frame(frame)
+            },
+            None => panic!("Tried to add a frame to a non-existing packet ({})", log_key)
+        }
+    }
+
+    pub fn log_quic_packets_received(cid: String, packet_num: PacketNum) {
+        // Need to introduce this extra scope so the lock gets dropped before logging
+        let event = {
+            let mut qlog_writer = QLOG_WRITER.lock().unwrap();
+
+            let key = format!("{}:{}", cid, packet_num);
+            let log_key = format!("{}...:{}", cid.get(0..5).unwrap(), packet_num);
+
+            match qlog_writer.cached_received_quic_packets.remove(&key) {
+                Some((packet, time)) => {
+                    // println!("QUIC packets still cached: {:?}", qlog_writer.cached_received_quic_packets.keys());
+                    Some(Event::new_quic_10_with_time("packet_received", Quic10EventData::PacketReceived(packet), Some(cid.clone()), time))
+                },
+                None => {
+                    println!("Tried to log a non-existing packet with key {}", log_key);
+                    None
+                }
+            }
+        };
+
+        if let Some(e) = event {
+            QlogWriter::log_event(e);
         }
     }
 }

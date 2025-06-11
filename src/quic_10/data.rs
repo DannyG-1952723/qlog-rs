@@ -222,6 +222,16 @@ impl PacketHeader {
             dcid
         }
     }
+
+    pub fn update_packet_length(&mut self, payload_length: u16) {
+        let packet_num_length = match self.length {
+            Some(length) => length,
+            // Don't update when None
+            None => return,
+        };
+
+        self.length = Some(packet_num_length + payload_length)
+    }
 }
 
 // The token carried in an Initial packet can either be a retry token from a Retry packet, or one originally provided by the server in a NEW_TOKEN frame used when resuming a connection (e.g., for address validation purposes). Retry and resumption tokens typically contain encoded metadata to check the token's validity when it is used, but this metadata and its format is implementation specific. For that, Token includes a general-purpose details field.
