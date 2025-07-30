@@ -8,7 +8,7 @@ use chrono::Utc;
 
 use serde::Serialize;
 
-use crate::{events::Event, logfile::{CommonFields, LogFile, QlogFileSeq, TraceSeq, VantagePoint}, quic_10::data::Quic10EventData};
+use crate::{events::Event, logfile::{CommonFields, LogFile, QlogFileSeq, ReferenceTime, TimeFormat, TraceSeq, VantagePoint}, quic_10::data::Quic10EventData};
 
 #[cfg(feature = "quic-10")]
 use crate::quic_10::{data::QuicFrame, events::{PacketReceived, PacketSent}};
@@ -80,12 +80,24 @@ impl QlogWriter {
 	}
 
 	/// Logs the needed details so qlog file readers can interpret the logs correctly
-	pub fn log_file_details(file_title: Option<String>, file_description: Option<String>, trace_title: Option<String>, trace_description: Option<String>, vantage_point: Option<VantagePoint>) {
+	pub fn log_file_details(file_title: Option<String>, file_description: Option<String>, trace_title: Option<String>, trace_description: Option<String>, vantage_point: Option<VantagePoint>, custom_fields: Option<HashMap<String, String>>) {
 		let mut qlog_writer = QLOG_WRITER.lock().unwrap();
 
 		if let Some(ref sender) = qlog_writer.sender {
 			let log_file_details = LogFile::new(file_title, file_description);
-			let trace = TraceSeq::new(trace_title, trace_description, Some(CommonFields::default()), vantage_point);
+
+            let common_fields = match custom_fields {
+                Some(fields) => CommonFields::new(
+                    Some("".to_string()),
+                    Some(TimeFormat::default()),
+			        Some(ReferenceTime::default()),
+                    None,
+                    Some(fields)
+                ),
+                None => CommonFields::default(),
+            };
+
+			let trace = TraceSeq::new(trace_title, trace_description, Some(common_fields), vantage_point);
 
 			let qlog_file_seq = QlogFileSeq::new(log_file_details, trace);
 
