@@ -1,6 +1,5 @@
 use std::{collections::VecDeque, env, fs::File, io::{BufWriter, Write}, sync::{mpsc::{self, Sender}, LazyLock, Mutex}, thread};
 
-#[cfg(feature = "quic-10")]
 use std::collections::HashMap;
 
 #[cfg(feature = "quic-10")]
@@ -8,7 +7,10 @@ use chrono::Utc;
 
 use serde::Serialize;
 
-use crate::{events::Event, logfile::{CommonFields, LogFile, QlogFileSeq, ReferenceTime, TimeFormat, TraceSeq, VantagePoint}, quic_10::data::Quic10EventData};
+use crate::{events::Event, logfile::{CommonFields, LogFile, QlogFileSeq, ReferenceTime, TimeFormat, TraceSeq, VantagePoint}};
+
+#[cfg(feature = "quic-10")]
+use crate::quic_10::data::Quic10EventData;
 
 #[cfg(feature = "quic-10")]
 use crate::quic_10::{data::QuicFrame, events::{PacketReceived, PacketSent}};
@@ -190,7 +192,7 @@ impl QlogWriter {
         let existing_value = qlog_writer.cached_sent_quic_packets.insert(key, packet);
 
         if existing_value.is_some() {
-            println!("KEY {} ALREADY EXISTS, OVERWROTE QUIC PACKET", log_key);
+            println!("KEY {} ALREADY EXISTS, OVERWROTE QUIC SENT PACKET", log_key);
         }
     }
 
@@ -198,10 +200,11 @@ impl QlogWriter {
         let mut qlog_writer = QLOG_WRITER.lock().unwrap();
 
         let key = format!("{}:{}", cid, packet_num);
+        let log_key = format!("{}...:{}", cid.get(0..5).unwrap(), packet_num);
 
         match qlog_writer.cached_sent_quic_packets.get_mut(&key) {
             Some(packet) => packet.add_frame(frame),
-            None => panic!("Tried to add a frame to a non-existing packet")
+            None => panic!("Tried to add a frame to a non-existing sent packet (key = {})", log_key)
         }
     }
 
@@ -220,7 +223,7 @@ impl QlogWriter {
                         Some(Event::new_quic_10("packet_sent", Quic10EventData::PacketSent(packet), Some(cid.clone())))
                     },
                     None => {
-                        println!("Tried to log a non-existing packet with key {}", log_key);
+                        println!("Tried to log a non-existing sent packet with key {}", log_key);
                         None
                     }
                 }
@@ -258,7 +261,7 @@ impl QlogWriter {
         let existing_value = qlog_writer.cached_received_quic_packets.insert(key, (packet, time));
 
         if existing_value.is_some() {
-            println!("KEY {} ALREADY EXISTS, OVERWROTE QUIC PACKET", log_key);
+            println!("KEY {} ALREADY EXISTS, OVERWROTE QUIC RECEIVED PACKET", log_key);
         }
     }
 
@@ -273,7 +276,7 @@ impl QlogWriter {
                 // println!("Added {:?} to packet {}", frame, log_key);
                 packet.add_frame(frame)
             },
-            None => panic!("Tried to add a frame to a non-existing packet ({})", log_key)
+            None => panic!("Tried to add a frame to a non-existing received packet ({})", log_key)
         }
     }
 
@@ -291,7 +294,7 @@ impl QlogWriter {
                     Some(Event::new_quic_10_with_time("packet_received", Quic10EventData::PacketReceived(packet), Some(cid.clone()), time))
                 },
                 None => {
-                    println!("Tried to log a non-existing packet with key {}", log_key);
+                    println!("Tried to log a non-existing received packet with key {}", log_key);
                     None
                 }
             }
