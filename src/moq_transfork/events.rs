@@ -86,14 +86,14 @@ impl Announce {
 pub struct Subscribe {
 	subscribe_id: u64,
 	track_path_parts: Vec<String>,
-	track_priority: u64,
+	track_priority: i64,
 	group_order: u64,
 	group_min: u64,
 	group_max: u64
 }
 
 impl Subscribe {
-	pub fn new(subscribe_id: u64, track_path_parts: Vec<String>, track_priority: u64, group_order: u64, group_min: u64, group_max: u64) -> Self {
+	pub fn new(subscribe_id: u64, track_path_parts: Vec<String>, track_priority: i64, group_order: u64, group_min: u64, group_max: u64) -> Self {
 		Self { subscribe_id, track_path_parts, track_priority, group_order, group_min, group_max }
 	}
 }
@@ -127,13 +127,13 @@ impl SubscribeGap {
 
 #[derive(Serialize)]
 pub struct Info {
-	track_priority: u64,
+	track_priority: i64,
 	group_latest: u64,
 	group_order: u64
 }
 
 impl Info {
-	pub fn new(track_priority: u64, group_latest: u64, group_order: u64) -> Self {
+	pub fn new(track_priority: i64, group_latest: u64, group_order: u64) -> Self {
 		Self { track_priority, group_latest, group_order }
 	}
 }
@@ -152,24 +152,24 @@ impl InfoPlease {
 #[derive(Serialize)]
 pub struct Fetch {
 	track_path_parts: Vec<String>,
-	track_priority: u64,
+	track_priority: i64,
 	group_sequence: u64,
 	frame_sequence: u64
 }
 
 impl Fetch {
-	pub fn new(track_path_parts: Vec<String>, track_priority: u64, group_sequence: u64, frame_sequence: u64) -> Self {
+	pub fn new(track_path_parts: Vec<String>, track_priority: i64, group_sequence: u64, frame_sequence: u64) -> Self {
 		Self { track_path_parts, track_priority, group_sequence, frame_sequence }
 	}
 }
 
 #[derive(Serialize)]
 pub struct FetchUpdate {
-	track_priority: u64
+	track_priority: i64
 }
 
 impl FetchUpdate {
-	pub fn new(track_priority: u64) -> Self {
+	pub fn new(track_priority: i64) -> Self {
 		Self { track_priority }
 	}
 }
